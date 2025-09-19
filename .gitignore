@@ -1,0 +1,5 @@
+.DS_Store
+.Rhistory
+.Rproj.user
+results/*
+!results/.gitkeep

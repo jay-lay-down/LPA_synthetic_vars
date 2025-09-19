@@ -1,58 +1,108 @@
 # Latent Profile Analysis (LPA) Pipeline
 
 A reproducible R pipeline for Latent Profile Analysis (LPA) using `tidyLPA`.  
-It sweeps model parameterizations (1–6) and profile counts (1..K), selects the best by **BIC** (ties → higher **Entropy**), and saves class assignments, class-wise means, and plots.  
-**Region column is optional**: if you pass `--region` but the column is absent, the script proceeds with a single global run (no failure).
+It sweeps model parameterizations (1–6) × profile counts (1..K), selects the best by **BIC** (tie → higher **Entropy**), and saves:
+class assignments, class-wise means, and plots.  
+Optional region-aware runs are supported; if `--region` is provided but the column is missing, the option is ignored (single global run).
 
 ---
 
-## Repository Structure
-- `R/lpa_pipeline.R` — the analysis pipeline (drop-in; no edits required)
-- `data/toy_stores_clustered.csv` — example dataset (clustered for clear profiles)
-- `results/` — output folder (created automatically)
+## Contents
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Data Schema](#data-schema)
+- [How to Run](#how-to-run)
+- [Outputs](#outputs)
+- [Analysis Flow](#analysis-flow)
+- [Interpretation Guide](#interpretation-guide)
+- [CLI Options](#cli-options)
+- [Troubleshooting](#troubleshooting)
+- [Reproducibility](#reproducibility)
+- [License](#license)
 
 ---
 
-## Example Data (`data/toy_stores_clustered.csv`)
+## Prerequisites
 
-Columns:
-- `NAME` — store ID  
-- `ENGAGEMENT_EMPLOYEE`, `ENGAGEMENT_MANAGER` — engagement (≈ 1.5–4.9, one decimal)  
-- `ATTRITION_EMPLOYEE`, `ATTRITION_MANAGER` — attrition rate (≈ 0.02–0.45, two decimals)
-
-Notes:
-- The dataset is **clustered** so that LPA can recover 3–4 distinct profiles easily.  
-- You can replace this file with your own; keep the same schema or specify `--vars`.
-
----
-
-## Installation (once)
+- R ≥ 4.1
+- Packages:
 
 ```r
 install.packages(c(
   "optparse","dplyr","tidyr","ggplot2",
   "tidyLPA","readr","glue","purrr","stringr"
 ))
+```
 
+## Quick Start
 
-# How to Run
-## 1) Auto-detect variables (recommended)
-- ** Columns containing prefixes ENGAGEMENT_ / ATTRITION_ (or Korean keywords 참여 / 이탈) are detected automatically.
+Assuming the repository layout:
 
+```bash
+R/lpa_pipeline.R
+data/toy_stores_clustered.csv
+results/              # generated
+```
+
+Run with auto-detected variables:
+
+```bash
 Rscript R/lpa_pipeline.R data/toy_stores_clustered.csv \
   --id NAME --kmax 6 --scale TRUE --outdir results
+```
 
-## 2) Manually specify variables
+## Data Schema
+
+The example dataset is clustered for clear profiles. Replace with your own if needed.
+
+```sql
+Required:
+- ID column: NAME (use --id to match your file)
+
+Indicators (either auto-detected or passed via --vars):
+- ENGAGEMENT_EMPLOYEE   (≈ 1.5–4.9, one decimal)
+- ENGAGEMENT_MANAGER    (≈ 1.5–4.9, one decimal)
+- ATTRITION_EMPLOYEE    (≈ 0.02–0.45, two decimals)
+- ATTRITION_MANAGER     (≈ 0.02–0.45, two decimals)
+
+Optional:
+- Region column (e.g., Region) for per-region runs
+```
+
+**Auto-detection rules** (when `--vars` is omitted):
+
+Columns containing prefixes `ENGAGEMENT_` / `ATTRITION_`, or Korean keywords `참여` / `이탈`.
+
+## How to Run
+
+### 1) Auto-detect variables (recommended)
+
+```bash
+Rscript R/lpa_pipeline.R data/toy_stores_clustered.csv \
+  --id NAME --kmax 6 --scale TRUE --outdir results
+```
+
+### 2) Manually specify variables
+
+```bash
 Rscript R/lpa_pipeline.R data/toy_stores_clustered.csv --id NAME \
   --vars ENGAGEMENT_EMPLOYEE,ENGAGEMENT_MANAGER,ATTRITION_EMPLOYEE,ATTRITION_MANAGER \
   --kmax 6 --scale TRUE --outdir results
+```
 
-## 3) Optional region split
-If your data includes a region column (e.g., Region), you may ask for per-region runs.
-If the column is missing, the script silently ignores the option and runs once globally.
-Rscript R/lpa_pipeline.R data/your.csv --id NAME --region Region --kmax 6 --scale TRUE --outdir results
+### 3) Optional region split
 
-Outputs will be organized as:
+If your data includes a region column (e.g., `Region`), run per region.  
+If the column is missing, the script silently falls back to a single global run.
+
+```bash
+Rscript R/lpa_pipeline.R data/your.csv \
+  --id NAME --region Region --kmax 6 --scale TRUE --outdir results
+```
+
+Output organization when region is found:
+
+```bash
 results/
   Region=<value>/
     fit_indices.csv
@@ -61,75 +111,86 @@ results/
     elbow_bic.png
     profile_means.png
     session_info.txt
-regions_summary.csv        # (only when --region is used and found)
+regions_summary.csv   # present only if region runs were executed
+```
 
+## Outputs
 
-Outputs (in results/)
+```bash
+results/
+  fit_indices.csv     # all tried solutions: model, n_profiles, BIC, Entropy, ...
+  profiles.csv        # ID + assigned Class
+  profile_means.csv   # class-wise means (indicators)
+  elbow_bic.png       # BIC vs. number of profiles (lines by model)
+  profile_means.png   # class-wise mean line plot
+  session_info.txt    # R session info for reproducibility
+```
 
-fit_indices.csv — all tried solutions (model, n_profiles, BIC, Entropy, …)
+## Analysis Flow
 
-profiles.csv — NAME + assigned Class
+(what the script does)
 
-profile_means.csv — per-class means for all indicators
+1. Load CSV and validate `--id`.
+2. Select indicators: `--vars` if provided, otherwise auto-detect via name patterns.
+3. Handle missing values by median imputation (simple default).
+4. Scale indicators when `--scale TRUE` (recommended if ranges differ).
+5. Fit LPA across models 1–6 and profiles 1..kmax.
+6. Choose solution by min BIC; tie-break by max Entropy.
+7. Export class assignments, class-wise means, and plots.
+8. If `--region` exists in the data, repeat steps 1–7 per region and write an index.
 
-elbow_bic.png — BIC vs. number of profiles (lines by model)
+## Interpretation Guide
 
-profile_means.png — class-wise mean line plot
+(brief)
 
-session_info.txt — R session info for reproducibility
+- **Profiles** summarize typical patterns (e.g., high engagement / low attrition vs. the opposite).
+- **K selection**: small K can merge distinct groups (under-extraction); large K can over-fragment. Use BIC + Entropy + domain sense.
+- **Class sizes**: very small classes (< 5%) need caution in decision-making.
+- **Posterior clarity**: many low max posteriors = fuzzy boundaries → try fewer K or revise indicators.
+- **Actionable labels**: rename classes to narrative labels (e.g., `HighEng_LowAttr`, `LowEng_HighAttr`) and tie to interventions.
 
-Analysis Flow (what the script does)
+## CLI Options
 
-Load & validate: read CSV; ensure --id exists.
+(summary)
 
-Variable selection: use --vars if given; otherwise auto-detect by name patterns (ENGAGEMENT_, ATTRITION_, or 참여, 이탈).
+```
+--id <CHAR>                 # required; ID column name (e.g., NAME)
+--vars <CSV>                # optional; comma-separated indicators. If omitted, auto-detect
+--kmax <INT>                # default: 6; maximum number of profiles to try
+--scale <TRUE|FALSE>        # default: TRUE; standardize indicators
+--outdir <PATH>             # default: results; output directory
+--region <CHAR>             # optional; region column. If missing in data, ignored
+```
 
-Missing values: median imputation (simple, editable in the script).
+**Examples:**
 
-Scaling: standardize indicators when --scale TRUE (recommended if ranges differ).
+```bash
+# Korean-named columns example
+Rscript R/lpa_pipeline.R data/your.csv --id 매장명 \
+  --vars 직원참여도,관리자참여도,직원이탈률,관리자이탈률 \
+  --kmax 5 --scale TRUE --outdir results_kr
+```
 
-Grid search: fit LPA for models 1–6 and profiles 1..kmax.
+## Troubleshooting
 
-Model selection: choose min BIC; break ties by higher Entropy.
+- **Auto-detect failed**  
+  → Ensure indicator names contain `ENGAGEMENT_` / `ATTRITION_` (or `참여` / `이탈`), or pass `--vars`.
 
-Class assignment: export IDs with Class and class-wise means; save plots.
+- **ID column not found**  
+  → `--id` must match a column name exactly (case-sensitive).
 
-(Optional) Region: if --region exists in the data, repeat steps 1–7 per region.
+- **Packages missing**  
+  → Re-run the install block or install individually.
 
-Interpretation Guide (brief)
+- **Flat/odd plots**  
+  → Use `--scale TRUE`, check constant indicators or extreme outliers, try a different kmax.
 
-Profiles summarize typical patterns across continuous indicators (e.g., high engagement / low attrition vs. the opposite).
+## Reproducibility
 
-K selection: too small (under-extracted); too large (over-fragmented). Use BIC + Entropy and check substantive sense.
+- Random seed fixed: `set.seed(123)`.
+- `session_info.txt` records package versions.
+- File-based pipeline; no hidden state.
 
-Class sizes: extremely small classes (< 5%) require caution.
-
-Posterior probabilities: if many cases have low max posterior, boundaries are fuzzy → consider fewer K or different indicators.
-
-Actionable labels: rename classes to narrative labels (e.g., HighEng_LowAttr, LowEng_HighAttr) and tie to interventions.
-
-Troubleshooting
-
-“Auto-detect failed”
-→ Rename columns to include ENGAGEMENT_ / ATTRITION_ (or 참여 / 이탈), or pass --vars explicitly.
-
-“ID column not found”
-→ Ensure --id exactly matches a column name (case-sensitive).
-
-Package not found
-→ Re-run the install block above, or install missing packages individually.
-
-Weird plots / flat profiles
-→ Confirm scaling (--scale TRUE), check for constant/near-constant indicators, remove extreme outliers, or try different kmax.
-
-Reproducibility
-
-Random seed is fixed (set.seed(123)).
-
-session_info.txt is written to capture package versions.
-
-The script is file-based; no hidden state.
-
-License
+## License
 
 MIT (optional). Add a LICENSE file if you plan to share.

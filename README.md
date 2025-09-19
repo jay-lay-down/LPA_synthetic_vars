@@ -17,3 +17,6 @@ results/  (generated)
 ```r
 install.packages(c("optparse","dplyr","tidyr","ggplot2",
                    "tidyLPA","readr","glue","purrr","stringr"))
+## run
+Rscript R/lpa_pipeline.R data/toy_stores_engagement_attrition.csv \
+  --id NAME --kmax 6 --scale TRUE --outdir results

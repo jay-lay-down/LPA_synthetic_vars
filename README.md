@@ -1,5 +1,3 @@
-물론이죠. 제공해주신 내용을 GitHub README에 적합한 마크다운 형식으로 정리해 드릴게요.
-
 Latent Profile Analysis (LPA) Pipeline
 A small, reproducible R pipeline for Latent Profile Analysis (LPA).
 It sweeps multiple model parameterizations (1–6) and profile counts (1..K), selects the best by BIC (tie → higher Entropy), and exports assignments, profile means, and plots.
